@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'" />
+  <title>Store Inventory Management System — first-time setup</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: #f3f5f8; color: #1d2733; }
+    header { background: #12355b; color: #fff; padding: 22px 28px; }
+    header h1 { margin: 0 0 4px; font-size: 19px; font-weight: 600; }
+    header p { margin: 0; font-size: 13px; opacity: .85; }
+    form { padding: 22px 28px; display: grid; gap: 14px; }
+    label { display: grid; gap: 5px; font-size: 13px; font-weight: 600; }
+    small { font-weight: 400; color: #5b6878; }
+    input { font: inherit; font-weight: 400; padding: 9px 10px; border: 1px solid #b9c3cf; border-radius: 6px; background: #fff; }
+    input:focus { outline: 2px solid #2f6fb5; outline-offset: 0; border-color: #2f6fb5; }
+    button { margin-top: 6px; font: inherit; font-weight: 600; padding: 11px; border: 0; border-radius: 6px; background: #1f5fa8; color: #fff; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: default; }
+    .error { min-height: 1.3em; margin: 0; color: #b3261e; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Create the administrator account</h1>
+    <p>This is the first start on this computer. The administrator can add other users later under Settings.</p>
+  </header>
+  <form id="form" autocomplete="off">
+    <label>Username <small>3–32 characters: letters, numbers, . _ -</small>
+      <input id="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9._\-]+" autofocus />
+    </label>
+    <label>Full name
+      <input id="name" maxlength="100" />
+    </label>
+    <label>Password <small>at least 8 characters, with letters and numbers</small>
+      <input id="password" type="password" required minlength="8" />
+    </label>
+    <label>Confirm password
+      <input id="confirm" type="password" required minlength="8" />
+    </label>
+    <p class="error" id="error" role="alert"></p>
+    <button id="submit" type="submit">Create administrator and continue</button>
+  </form>
+  <script src="setup.js"></script>
+</body>
+</html>

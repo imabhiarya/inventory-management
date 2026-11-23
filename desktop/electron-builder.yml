@@ -1,0 +1,49 @@
+appId: in.mes.store.inventory
+# productName comes from desktop/package.json.
+copyright: Saroj Kumar
+directories:
+  output: release
+  buildResources: build-resources
+
+afterPack: scripts/after-pack.cjs
+
+# The Electron shell itself (main process + setup screens).
+files:
+  - src/**/*
+  - package.json
+  - node_modules/**/*
+
+# The API server, the built React UI and mongod.exe sit beside the app, unpacked.
+extraResources:
+  - from: build/server
+    to: server
+    # Its node_modules folder is skipped here; scripts/after-pack.cjs copies it in.
+    filter: ["**/*"]
+  - from: build/client
+    to: client
+    filter: ["**/*"]
+  - from: vendor/mongodb/win32-x64
+    to: mongodb
+    filter: ["mongod.exe", "LICENSE*", "THIRD-PARTY*", "README*"]
+  - from: vendor/vcredist
+    to: vcredist
+    filter: ["vc_redist.x64.exe"]
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  # App, installer and shortcut icon: build-resources/icon.ico (made by scripts/render-icon.cjs).
+  icon: build-resources/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Store Inventory Management System
+  # Keep the database when the app is uninstalled; it lives in %APPDATA%\Store Inventory Management System.
+  deleteAppDataOnUninstall: false
+  # build-resources/installer.nsh installs the Visual C++ runtime when it is missing.
+  artifactName: Store-Inventory-Setup-${version}.exe

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><!-- Placeholder: replace with your organisation's emblem (same file name, or update Layout.jsx) -->
+<circle cx="60" cy="60" r="56" fill="#123d8a" stroke="#f5c518" stroke-width="4"/>
+<path d="M60 22 88 34v24c0 20-12 33-28 40-16-7-28-20-28-40V34z" fill="#fff"/>
+<path d="M60 32 80 41v17c0 14-8 24-20 30-12-6-20-16-20-30V41z" fill="#1e88e5"/>
+<text x="60" y="68" font-family="Arial" font-weight="700" font-size="14" fill="#fff" text-anchor="middle">LOGO</text>
+</svg>

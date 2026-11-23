@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'" />
+  <title>Store Inventory Management System</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+      font-family: "Segoe UI", system-ui, sans-serif; background: #12355b; color: #fff;
+      -webkit-user-select: none; user-select: none; -webkit-app-region: drag;
+    }
+    img { width: 72px; height: 72px; }
+    h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: .3px; }
+    p { margin: 0; font-size: 13px; opacity: .8; }
+    .spinner {
+      width: 30px; height: 30px; border-radius: 50%;
+      border: 3px solid rgba(255,255,255,.25); border-top-color: #fff;
+      animation: spin .9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <img src="logo.png" alt="" />
+  <h1>Store Inventory Management System</h1>
+  <div class="spinner"></div>
+  <p>Starting database and server…</p>
+</body>
+</html>

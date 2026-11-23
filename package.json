@@ -1,0 +1,17 @@
+{
+  "name": "store-inventory",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Store Inventory Management System (MERN)",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server start",
+    "test": "npm --prefix server test",
+    "desktop:install": "npm --prefix desktop install && node desktop/node_modules/electron/install.js",
+    "desktop:start": "npm --prefix desktop start",
+    "desktop:dist:win": "npm --prefix desktop run dist:win"
+  }
+}

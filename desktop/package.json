@@ -1,0 +1,23 @@
+{
+  "name": "store-inventory",
+  "productName": "Store Inventory Management System",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Store Inventory Management System — Windows desktop app",
+  "author": "Saroj Kumar",
+  "main": "src/main.js",
+  "scripts": {
+    "prepare:resources": "node scripts/prepare.mjs",
+    "fetch:vendor": "node scripts/fetch-vendor.mjs",
+    "start": "npm --prefix ../client run build && electron .",
+    "dist:win": "npm run prepare:resources && npm run fetch:vendor && electron-builder --win --x64",
+    "dist:win:dir": "npm run prepare:resources && npm run fetch:vendor && electron-builder --win --x64 --dir"
+  },
+  "dependencies": {
+    "mongodb": "7.8.0"
+  },
+  "devDependencies": {
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0"
+  }
+}

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><!-- Placeholder: replace with your organisation's emblem (same file name, or update Layout.jsx) -->
+<circle cx="60" cy="60" r="56" fill="#fff" stroke="#c62828" stroke-width="6"/>
+<circle cx="60" cy="60" r="38" fill="none" stroke="#c62828" stroke-width="2"/>
+<rect x="44" y="44" width="32" height="32" rx="4" fill="#c62828"/>
+<path d="M50 54h20M50 60h20M50 66h20" stroke="#fff" stroke-width="3"/>
+</svg>

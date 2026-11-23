@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'" />
+  <title>Online sync</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: #f3f5f8; color: #1d2733; font-size: 14px; }
+    header { background: #12355b; color: #fff; padding: 18px 24px; }
+    header h1 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+    header p { margin: 0; font-size: 13px; opacity: .85; line-height: 1.4; }
+    main { padding: 18px 24px; display: grid; gap: 14px; }
+    .status { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 8px; background: #fff; border: 1px solid #d5dce5; line-height: 1.4; }
+    .dot { flex: none; width: 10px; height: 10px; margin-top: 5px; border-radius: 50%; background: #8a96a5; }
+    .dot.synced { background: #1e8e3e; } .dot.uploading, .dot.connecting { background: #e8a200; }
+    .dot.offline { background: #8a96a5; } .dot.error { background: #c5221f; }
+    label { display: grid; gap: 5px; font-weight: 600; font-size: 13px; }
+    small { font-weight: 400; color: #5b6878; line-height: 1.4; }
+    input { font: inherit; font-weight: 400; padding: 8px 10px; border: 1px solid #b9c3cf; border-radius: 6px; background: #fff; }
+    input:focus { outline: 2px solid #2f6fb5; border-color: #2f6fb5; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    button { font: inherit; font-weight: 600; padding: 9px 14px; border-radius: 6px; border: 1px solid #1f5fa8; background: #fff; color: #1f5fa8; cursor: pointer; }
+    button.primary { background: #1f5fa8; color: #fff; }
+    button.danger { border-color: #b3261e; color: #b3261e; }
+    button:disabled { opacity: .55; cursor: default; }
+    .msg { min-height: 1.4em; margin: 0; font-size: 13px; line-height: 1.4; }
+    .msg.err { color: #b3261e; } .msg.ok { color: #1e7a35; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Online sync (MongoDB Atlas)</h1>
+    <p>Everything is always saved on this computer first. When online sync is on, every change is also copied to your online database, automatically and in the background. Without internet the app works normally and catches up when the connection returns.</p>
+  </header>
+  <main>
+    <div class="status"><span class="dot" id="dot"></span><span id="status">Online sync is off.</span></div>
+
+    <label>Connection string
+      <input id="uri" type="password" placeholder="mongodb+srv://user:password@cluster0.xxxxx.mongodb.net/" autocomplete="off" spellcheck="false" />
+      <small id="uriHint">From Atlas: Database → Connect → Drivers. Stored encrypted on this computer.</small>
+    </label>
+    <label>Online database name
+      <input id="dbName" value="store_inventory" spellcheck="false" />
+      <small>Use a new, empty database. It becomes a copy of this computer's data and should not be edited directly.</small>
+    </label>
+
+    <div class="row">
+      <button id="test" type="button">Test connection</button>
+      <button id="save" type="button" class="primary">Save and turn on</button>
+      <button id="now" type="button">Sync now</button>
+      <button id="off" type="button" class="danger">Turn off</button>
+    </div>
+    <p class="msg" id="msg" role="status"></p>
+  </main>
+  <script src="sync.js"></script>
+</body>
+</html>
