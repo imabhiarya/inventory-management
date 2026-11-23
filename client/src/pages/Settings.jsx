@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings as SettingsIcon, Store, ListChecks, Users, Save, Plus, Pencil, X, BookOpen, Trash2, Check, CornerDownRight, ListPlus, Hash, ShoppingCart, ClipboardPen } from 'lucide-react';
+import { Settings as SettingsIcon, Store, ListChecks, Users, Save, Plus, Pencil, X, BookOpen, Trash2, Check, CornerDownRight, ListPlus, Hash, ShoppingCart, ClipboardPen, PenLine } from 'lucide-react';
 import AddLedgerModal from '../components/AddLedgerModal.jsx';
 import { api } from '../api.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -429,7 +429,7 @@ function UsersPanel() {
 export default function SettingsPage() {
   const { settings, isAdmin, reloadMeta } = useApp();
   const toast = useToast();
-  const [s, setS] = useState(() => ({ ...settings, otherOffices: settings.otherOffices || [], storeTypes: settings.storeTypes || [], codeHeads: settings.codeHeads.map((c) => ({ ...c })) }));
+  const [s, setS] = useState(() => ({ ...settings, otherOffices: settings.otherOffices || [], storeTypes: settings.storeTypes || [], codeHeads: settings.codeHeads.map((c) => ({ ...c })), dcsSignatures: (settings.dcsSignatures || []).map((x) => ({ title: x.title || '', name: x.name || '', designation: x.designation || '' })) }));
   const [busy, setBusy] = useState(false);
   const ro = !isAdmin;
 
@@ -443,6 +443,8 @@ export default function SettingsPage() {
         station: s.station,
         storeInCharge: s.storeInCharge,
         codeHeads: s.codeHeads.filter((c) => c.code.trim()),
+        dcsTitle: s.dcsTitle || 'DRAFTED COSTED SCHEDULED',
+        dcsSignatures: s.dcsSignatures.filter((x) => (x.title + x.name + x.designation).trim()),
       };
       for (const [k] of [...LISTS, ...ORDER_LISTS, ...DEMAND_LISTS]) body[k] = s[k];
       await api.put('/settings', body);
@@ -543,6 +545,62 @@ export default function SettingsPage() {
           {DEMAND_LISTS.map(([k, label]) => (
             <ListEditor key={k} label={label} values={s[k] || []} readOnly={ro} onChange={(v) => setS({ ...s, [k]: v })} />
           ))}
+        </div>
+      </Panel>
+
+      <Panel title="DCS / Consolidated Demand – Print Heading & Signature Blocks" icon={PenLine}>
+        <Field label="Heading on the printed DCS (full name)">
+          <input {...t('dcsTitle')} maxLength={120} placeholder="DRAFTED COSTED SCHEDULED" />
+        </Field>
+        <p className="muted" style={{ margin: '0 2px 10px', fontSize: 13 }}>
+          Signature blocks at the foot of the DCS and the Consolidated Demand print: add, remove or reorder them on the printed DCS (Demand → DCS). Name and designation are optional; leave them blank to
+          sign by hand. Remove all blocks to print without signatures. Press <b>Save Settings</b> (top) after editing.
+        </p>
+        <div style={{ display: 'grid', gap: 6 }}>
+          {s.dcsSignatures.map((x, i) => {
+            const setSig = (k) => (e) => setS({ ...s, dcsSignatures: s.dcsSignatures.map((y, j) => (j === i ? { ...y, [k]: e.target.value } : y)) });
+            const move = (d) => {
+              const list = [...s.dcsSignatures];
+              [list[i], list[i + d]] = [list[i + d], list[i]];
+              setS({ ...s, dcsSignatures: list });
+            };
+            return (
+              <div key={i} className="row" style={{ flexWrap: 'nowrap' }}>
+                <span className="muted" style={{ width: 22, textAlign: 'right' }}>
+                  {i + 1}.
+                </span>
+                <input className="input" value={x.title} readOnly={ro} placeholder="Title (e.g. Store I/C)" maxLength={80} onChange={setSig('title')} />
+                <input className="input" value={x.name} readOnly={ro} placeholder="Name (optional)" maxLength={120} onChange={setSig('name')} />
+                <input className="input" value={x.designation} readOnly={ro} placeholder="Designation (optional, e.g. AGE (I))" maxLength={120} onChange={setSig('designation')} />
+                {!ro && (
+                  <>
+                    <button type="button" className="icon-btn" title="Move left on the print" disabled={i === 0} onClick={() => move(-1)}>
+                      ↑
+                    </button>
+                    <button type="button" className="icon-btn" title="Move right on the print" disabled={i === s.dcsSignatures.length - 1} onClick={() => move(1)}>
+                      ↓
+                    </button>
+                    <button type="button" className="icon-btn del" aria-label="Remove signature block" title="Remove" onClick={() => setS({ ...s, dcsSignatures: s.dcsSignatures.filter((_, j) => j !== i) })}>
+                      <X size={16} />
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+          {!s.dcsSignatures.length && <p className="muted" style={{ margin: 0 }}>No signature blocks: the DCS prints without signatures.</p>}
+          {!ro && (
+            <div>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={s.dcsSignatures.length >= 8}
+                onClick={() => setS({ ...s, dcsSignatures: [...s.dcsSignatures, { title: '', name: '', designation: '' }] })}
+              >
+                <Plus size={16} /> Add signature block
+              </button>
+            </div>
+          )}
         </div>
       </Panel>
 

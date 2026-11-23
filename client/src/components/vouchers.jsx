@@ -205,6 +205,7 @@ export function VoucherViewModal({ kind, id, autoPrint, onClose }) {
   }, [voucher, autoPrint]);
   return (
     <Modal
+          printable
       title={voucher ? `${cfg.title} ${voucher[cfg.noField]}` : cfg.title}
       onClose={onClose}
       footer={

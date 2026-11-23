@@ -86,6 +86,7 @@ export function AppHeader({ onMenu }) {
   );
 }
 
+/** Whether the app's own server and database (on this PC) answer. Nothing to do with the internet. */
 function useServerStatus() {
   const [online, setOnline] = useState(true);
   useEffect(() => {
@@ -170,7 +171,7 @@ export default function Layout() {
             <span className="credit">{DESIGNED_BY}</span>
             <span className="sep" />
             <span>
-              <Database size={18} /> {online ? 'Central Database (Online)' : 'Server unreachable'}
+              <Database size={18} /> {online ? 'Database on this PC: Connected (works offline)' : 'Database on this PC: not running'}
             </span>
             <span>Version 1.0</span>
           </footer>

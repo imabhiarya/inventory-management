@@ -27,6 +27,7 @@ import dashboardRoutes from './routes/dashboard.js';
 import auditRoutes from './routes/audits.js';
 import orderRoutes from './routes/orders.js';
 import demandRoutes from './routes/demands.js';
+import dcsRoutes from './routes/dcs.js';
 import consolidatedDemandRoutes from './routes/consolidatedDemands.js';
 import backupRoutes from './routes/backup.js';
 
@@ -74,9 +75,9 @@ export function createApp() {
   app.use(cookieParser());
 
   // Larger body limit only for backup restore.
-  app.use('/api/backup/restore', express.json({ limit: '100mb' }));
+  app.use('/api/backup/restore', express.json({ limit: '500mb' }));
   // Audit attachments arrive as base64 JSON (15 MB file ≈ 20 MB encoded).
-  app.use(/^\/api\/audits\/[0-9a-f]{24}\/files$/, express.json({ limit: '22mb' }));
+  app.use(/^\/api\/(audits|dcs)\/[0-9a-f]{24}\/files$/, express.json({ limit: '22mb' }));
   app.use(express.json({ limit: '1mb' }));
 
   // CSRF defence-in-depth (on top of SameSite=strict cookies): any state-changing
@@ -114,6 +115,7 @@ export function createApp() {
   app.use('/api/audits', auditRoutes);
   app.use('/api/orders', orderRoutes);
   app.use('/api/demands', demandRoutes);
+  app.use('/api/dcs', dcsRoutes);
   app.use('/api/consolidated-demands', consolidatedDemandRoutes);
   app.use('/api', notFoundHandler);
 

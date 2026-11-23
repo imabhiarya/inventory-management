@@ -47,6 +47,8 @@ const settingsSchema = new mongoose.Schema(
     demandSubSections: [String], // Demand page
     demandFrequencies: [String], // Demand page
     demandAuthorities: [String], // Demand page
+    dcsTitle: String, // heading of the printed DCS
+    dcsSignatures: [{ _id: false, title: String, name: String, designation: String }], // printed on a DCS
     codeHeads: [{ _id: false, code: String, name: String }],
     // `parent`: key of the group ledger this one sits under (e.g. B&R / E&M Store Ledger under Maint Store).
     ledgers: [{ _id: false, key: String, label: String, prefix: String, parent: String }],
@@ -67,12 +69,23 @@ export async function getSettings() {
     orderUoms: (d) => d.uoms || [],
     orderProjectOffices: (d) => [d.station, ...(d.units || [])].filter(Boolean),
   };
-  for (const key of ['auditOffices', 'loanStoreTypes', 'procurementModes', 'orderApprovers', 'orderAccountsOffices', 'orderProjectOffices', 'demandSubSections', 'demandAuthorities', 'demandFrequencies', ...Object.keys(initial)]) {
+  for (const key of ['auditOffices', 'loanStoreTypes', 'procurementModes', 'orderApprovers', 'orderAccountsOffices', 'orderProjectOffices', 'demandSubSections', 'demandAuthorities', 'demandFrequencies', 'dcsSignatures', 'dcsTitle', ...Object.keys(initial)]) {
     if (doc && !doc[key]) {
       const value = initial[key] ? initial[key](doc) : DEFAULT_SETTINGS[key];
       await Settings.updateOne({ _id: 'app', [key]: { $exists: false } }, { $set: { [key]: value } });
       doc[key] = value;
     }
+  }
+  // The first DCS signature defaults (Prepared / Checked / Approved By, never edited) become Store I/C and Officer in Charge.
+  const sigs = doc?.dcsSignatures;
+  if (sigs?.length === 3 && sigs.every((x, i) => x.title === ['Prepared By', 'Checked By', 'Approved By'][i] && !x.name && !x.designation)) {
+    await Settings.updateOne({ _id: 'app' }, { $set: { dcsSignatures: DEFAULT_SETTINGS.dcsSignatures } });
+    doc.dcsSignatures = DEFAULT_SETTINGS.dcsSignatures;
+  }
+  // The first DCS heading default (Detailed Cost Statement, never edited) becomes the correct full name.
+  if (doc?.dcsTitle === 'DETAILED COST STATEMENT') {
+    await Settings.updateOne({ _id: 'app', dcsTitle: 'DETAILED COST STATEMENT' }, { $set: { dcsTitle: DEFAULT_SETTINGS.dcsTitle } });
+    doc.dcsTitle = DEFAULT_SETTINGS.dcsTitle;
   }
   if (doc?.ledgers?.length) return doc;
   if (doc) {

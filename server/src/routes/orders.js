@@ -6,7 +6,7 @@ import { canWrite, adminOnly } from '../middleware/auth.js';
 import { validate, idParam, zDay, zText, zReqText } from '../middleware/validate.js';
 import { badRequest, notFound, escapeRegex, round2, round3 } from '../utils/httpError.js';
 import { pad6 } from '../services/vouchers.js';
-import { fyLabel } from '../utils/dates.js';
+import { fyLabel, fyRange } from '../utils/dates.js';
 
 /** The "Project contingency" code head carries the office it is for. */
 export const isProjectContingency = (codeHead) => /project\s*contingency/i.test(codeHead || '');
@@ -121,6 +121,49 @@ router.get('/', validate(listQuery, 'query'), async (req, res) => {
   const live = rows.filter((r) => !r.cancelled);
   const sum = (k) => round2(live.reduce((s, r) => s + (r[k] || 0), 0));
   res.json({ rows, totals: { orders: live.length, orderValue: sum('orderValue'), billAmount: sum('billAmount'), paymentAmount: sum('paymentAmount') } });
+});
+
+/**
+ * Payments (MER): what was paid in each month of a financial year (Apr–Mar), per code head.
+ * A payment counts in the month of its payment date, whatever the order's own budget year.
+ * Cancelled orders are left out, as in the Order Report totals.
+ */
+router.get('/payments', validate(z.object({ fy: zFy }), 'query'), async (req, res) => {
+  const { fy } = req.valid.query;
+  const range = fyRange(fy);
+  if (!range) throw badRequest('Financial year must look like 2026-27');
+  const startYear = range.from.getUTCFullYear();
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(Date.UTC(startYear, 3 + i, 1));
+    return { key: d.toISOString().slice(0, 7), label: d.toLocaleString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' }) };
+  });
+  const orders = await PurchaseOrder.find({ cancelled: { $ne: true }, paymentDate: { $gte: range.from, $lte: range.to }, paymentAmount: { $gt: 0 } })
+    .sort({ paymentDate: 1, orderNo: 1 })
+    .select('orderNo vendor supplyOrderNo codeHead projectOffice budgetYear paymentDate paymentAmount paymentRef')
+    .lean();
+
+  const heads = new Map();
+  const monthTotals = Array(12).fill(0);
+  for (const o of orders) {
+    const m = (o.paymentDate.getUTCFullYear() - startYear) * 12 + o.paymentDate.getUTCMonth() - 3;
+    const head = o.codeHead || '';
+    if (!heads.has(head)) heads.set(head, { codeHead: head, months: Array(12).fill(0), total: 0, payments: 0 });
+    const row = heads.get(head);
+    row.months[m] += o.paymentAmount;
+    row.total += o.paymentAmount;
+    row.payments += 1;
+    monthTotals[m] += o.paymentAmount;
+  }
+  const rows = [...heads.values()]
+    .map((r) => ({ ...r, months: r.months.map(round2), total: round2(r.total) }))
+    .sort((a, b) => (!a.codeHead) - (!b.codeHead) || a.codeHead.localeCompare(b.codeHead, 'en', { numeric: true }));
+  res.json({
+    fy,
+    months,
+    rows,
+    totals: { months: monthTotals.map(round2), total: round2(monthTotals.reduce((s, v) => s + v, 0)), payments: orders.length },
+    payments: orders.map((o) => ({ ...o, month: o.paymentDate.toISOString().slice(0, 7) })),
+  });
 });
 
 router.get('/:id', validate(idParam, 'params'), async (req, res) => {

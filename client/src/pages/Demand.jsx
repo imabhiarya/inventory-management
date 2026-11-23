@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { ClipboardPen, ClipboardList, Plus, Trash2, Save, RotateCcw, Printer, Pencil, Eye, Search, X, Layers } from 'lucide-react';
+import { ClipboardPen, ClipboardList, Plus, Trash2, Save, RotateCcw, Printer, Pencil, Eye, Search, X, Layers, FileSpreadsheet } from 'lucide-react';
 import ConsolidatedDemand from './ConsolidatedDemand.jsx';
+import DcsPage from './Dcs.jsx';
 import { api } from '../api.js';
 import { useApp } from '../context/AppContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -436,8 +437,13 @@ export default function DemandPage() {
         >
           <Layers size={20} /> Consolidated Demand
         </button>
+        <button type="button" className={`tab ${tab === 'dcs' ? 'active' : ''}`} onClick={() => setTab('dcs')}>
+          <FileSpreadsheet size={20} /> DCS
+        </button>
       </div>
-      {tab === 'consolidated' ? (
+      {tab === 'dcs' ? (
+        <DcsPage />
+      ) : tab === 'consolidated' ? (
         <ConsolidatedDemand />
       ) : (
         <>
@@ -556,6 +562,7 @@ export default function DemandPage() {
 
       {viewing && (
         <Modal
+          printable
           title={`Demand ${viewing.demandNo}`}
           size="lg"
           onClose={() => setViewing(null)}

@@ -71,6 +71,17 @@ router.put(
       demandSubSections: list.optional(),
       demandFrequencies: list.optional(),
       demandAuthorities: list.optional(),
+      dcsTitle: z.string().trim().min(1, 'Enter the DCS heading').max(120).optional(),
+      dcsSignatures: z
+        .array(
+          z.object({
+            title: z.string().trim().min(1, 'Each signature block needs a title (e.g. Prepared By)').max(80),
+            name: z.string().trim().max(120).optional().default(''),
+            designation: z.string().trim().max(120).optional().default(''),
+          }),
+        )
+        .max(8, 'At most 8 signature blocks')
+        .optional(),
       uoms: list.refine((a) => a.length > 0, 'At least one unit of measure is required'),
       codeHeads: z.array(z.object({ code: z.string().trim().min(1).max(20), name: z.string().trim().max(120) })).max(500),
     }),

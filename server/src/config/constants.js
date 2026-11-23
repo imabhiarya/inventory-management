@@ -56,6 +56,12 @@ export const DEFAULT_SETTINGS = {
   demandSubSections: ['Admin', 'Works', 'Accounts', 'Stores', 'B/R', 'E/M', 'MT'],
   demandFrequencies: ['Regular', 'Monthly', 'Quarterly', 'Half Yearly', 'Annual', 'Urgent'],
   demandAuthorities: ['GE', 'AGE (I)', 'AGE (B/R)', 'AGE (E/M)', 'Commander'], // Type of Loan Store on Loan Store Ledger receipts / issues
+  dcsTitle: 'DRAFTED COSTED SCHEDULED', // heading of the printed DCS
+  // Signature blocks printed at the foot of a DCS (Settings → DCS – Signature Blocks).
+  dcsSignatures: [
+    { title: 'Store I/C', name: '', designation: '' },
+    { title: 'Officer in Charge', name: '', designation: '' },
+  ],
   uoms: ['Nos', 'Ream', 'Set', 'Kg', 'Ltr', 'Mtr', 'Pair', 'Box', 'Pkt', 'Roll'],
   codeHeads: [
     { code: '2210', name: 'Office Furniture' },

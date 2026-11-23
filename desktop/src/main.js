@@ -176,8 +176,8 @@ function closeSplash() {
 function runFirstAdminSetup(cfg) {
   return new Promise((resolve) => {
     const win = new BrowserWindow({
-      width: 480,
-      height: 600,
+      width: 520,
+      height: 760,
       resizable: false,
       title: `${APP_NAME} — first-time setup`,
       autoHideMenuBar: true,
@@ -218,8 +218,60 @@ function runFirstAdminSetup(cfg) {
     };
     ipcMain.handle('setup:create-admin', handler);
 
+    // New PC taking over from a failed one: restore the old PC's backup file instead of
+    // creating a new administrator. Its users (with their passwords) come back with it.
+    // The path is chosen here and kept here; the setup page never supplies a path itself.
+    let chosenBackup = null;
+    ipcMain.handle('setup:choose-backup', async () => {
+      const pick = await dialog.showOpenDialog(win, {
+        title: 'Choose the backup file from the old computer',
+        properties: ['openFile'],
+        filters: [{ name: 'Backup file', extensions: ['json'] }],
+      });
+      if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
+      const file = pick.filePaths[0];
+      try {
+        const json = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+        if (json?.format !== 'mes-store-backup' || !json.data) throw new Error('This file is not a backup from this software.');
+        const users = Array.isArray(json.data.users) ? json.data.users : [];
+        if (!users.some((u) => u.role === 'admin' && u.active !== false && u.passwordHash)) {
+          throw new Error('This backup has no administrator account, so nobody could sign in after restoring it.');
+        }
+        chosenBackup = file;
+        const n = (k) => (Array.isArray(json.data[k]) ? json.data[k].length : 0);
+        return {
+          ok: true,
+          name: path.basename(file),
+          createdAt: json.createdAt || null,
+          createdBy: json.createdBy || '',
+          summary: { items: n('items'), receipts: n('receipts'), issues: n('issues'), users: users.length, files: (json.files || []).length },
+        };
+      } catch (err) {
+        chosenBackup = null;
+        return { ok: false, error: err instanceof SyntaxError ? 'This file is not a valid backup (not JSON).' : err.message };
+      }
+    });
+    ipcMain.handle('setup:restore-backup', async () => {
+      if (!chosenBackup) return { ok: false, error: 'Choose the backup file first.' };
+      let result;
+      try {
+        result = await runScript('scripts/restore-backup.js', serverEnv(cfg, { BACKUP_FILE: chosenBackup }), 15 * 60_000);
+      } catch (err) {
+        return { ok: false, error: `Could not restore the backup: ${err.message}` };
+      }
+      if (result.code !== 0 || (await mongo.countActiveAdmins()) === 0) {
+        const msg = (result.stderr.match(/Error: (.*)/) || [])[1] || result.error || 'Could not restore the backup.';
+        return { ok: false, error: msg };
+      }
+      done = true;
+      setImmediate(() => win.destroy());
+      return { ok: true };
+    });
+
     win.on('closed', () => {
       ipcMain.removeHandler('setup:create-admin');
+      ipcMain.removeHandler('setup:choose-backup');
+      ipcMain.removeHandler('setup:restore-backup');
       resolve(done);
     });
     win.loadFile(path.join(__dirname, 'ui/setup.html'));

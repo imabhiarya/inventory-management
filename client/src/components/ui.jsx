@@ -5,6 +5,17 @@ import { useApp } from '../context/AppContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { fmtDate } from '../utils/format.js';
 import { exportExcel, exportPdf, printSection } from '../utils/export.js';
+import { usePrintSignatures } from '../utils/printSign.js';
+
+/** Tick box: print the signature blocks or not (applies to every print; remembered on this computer). */
+export function SignToggle({ pill }) {
+  const [on, setOn] = usePrintSignatures();
+  return (
+    <label className={`sign-toggle no-print${pill ? ' pill' : ''}`} title="Tick to print the signature blocks; untick to print without them">
+      <input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} /> Signature on print
+    </label>
+  );
+}
 
 export function PageHeader({ icon: Icon, title, plainIcon, back = true, extra }) {
   const { meta } = useApp();
@@ -24,6 +35,7 @@ export function PageHeader({ icon: Icon, title, plainIcon, back = true, extra })
       <span className="pill">
         <CalendarDays size={18} /> Financial Year : {meta?.currentFy?.replace('-', ' - ')}
       </span>
+      <SignToggle pill />
       {extra}
       {back && (
         <Link to="/" className="btn btn-green btn-lg">
@@ -78,7 +90,7 @@ export function Select({ options, value, onChange, placeholder, className = 'inp
   );
 }
 
-export function Modal({ title, onClose, children, footer, size }) {
+export function Modal({ title, onClose, children, footer, size, printable }) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -94,7 +106,12 @@ export function Modal({ title, onClose, children, footer, size }) {
           </button>
         </div>
         <div className="modal-body">{children}</div>
-        {footer && <div className="modal-foot no-print">{footer}</div>}
+        {footer && (
+          <div className="modal-foot no-print">
+            {printable && <SignToggle />}
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

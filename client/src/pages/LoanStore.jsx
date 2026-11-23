@@ -102,6 +102,7 @@ function LoanViewModal({ id, autoPrint, onClose }) {
   }, [v, autoPrint]);
   return (
     <Modal
+          printable
       title={v ? `Loan Voucher ${v.voucherNo}` : 'Loan Voucher'}
       onClose={onClose}
       footer={

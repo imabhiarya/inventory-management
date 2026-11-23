@@ -55,24 +55,32 @@ export async function exportExcel({ title, subtitle, columns, rows, filename, fo
   download(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${filename}.xlsx`);
 }
 
+// Page margins for every print and PDF (also the @page rule in styles.css), in mm.
+export const PRINT_MARGIN_MM = { top: 14, right: 15.5, bottom: 13.5, left: 22 };
+const MM = 72 / 25.4; // points per mm
+
 export async function exportPdf({ title, subtitle, columns, rows, filename, footer, orgTitle, orgSubtitle, orientation }) {
   const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
   const doc = new jsPDF({ orientation: orientation || (columns.length > 6 ? 'landscape' : 'portrait'), unit: 'pt', format: 'a4' });
   const w = doc.internal.pageSize.getWidth();
+  const m = Object.fromEntries(Object.entries(PRINT_MARGIN_MM).map(([k, v]) => [k, v * MM]));
+  const cx = m.left + (w - m.left - m.right) / 2; // centre of the printable width
+  const y = m.top + 10; // first line's baseline, just inside the top margin
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text(orgTitle || '', w / 2, 36, { align: 'center' });
+  doc.text(orgTitle || '', cx, y, { align: 'center' });
   doc.setFontSize(10);
-  doc.text(orgSubtitle || '', w / 2, 52, { align: 'center' });
+  doc.text(orgSubtitle || '', cx, y + 16, { align: 'center' });
   doc.setFontSize(12);
-  doc.text(title, w / 2, 74, { align: 'center' });
+  doc.text(title, cx, y + 38, { align: 'center' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  if (subtitle) doc.text(subtitle, w / 2, 90, { align: 'center' });
+  if (subtitle) doc.text(subtitle, cx, y + 54, { align: 'center' });
   // jsPDF's built-in fonts lack the rupee glyph.
   const clean = (s) => String(s ?? '').replace(/₹/g, 'Rs.');
   autoTable(doc, {
-    startY: 100,
+    startY: y + 64,
+    margin: { top: m.top, right: m.right, bottom: m.bottom + 14, left: m.left },
     head: [columns.map((c) => clean(c.label))],
     body: rows.map((r) => columns.map((c) => clean(cell(c, r)))),
     foot: footer ? [columns.map((c) => clean(footer[c.key] ?? ''))] : undefined,
@@ -83,8 +91,8 @@ export async function exportPdf({ title, subtitle, columns, rows, filename, foot
     didDrawPage: () => {
       const h = doc.internal.pageSize.getHeight();
       doc.setFontSize(8);
-      doc.text(`Generated ${new Date().toLocaleString('en-IN')}`, 40, h - 20);
-      doc.text(`Page ${doc.getNumberOfPages()}`, w - 40, h - 20, { align: 'right' });
+      doc.text(`Generated ${new Date().toLocaleString('en-IN')}`, m.left, h - m.bottom);
+      doc.text(`Page ${doc.getNumberOfPages()}`, w - m.right, h - m.bottom, { align: 'right' });
     },
   });
   doc.save(`${filename}.pdf`);

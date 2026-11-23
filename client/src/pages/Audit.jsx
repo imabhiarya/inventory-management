@@ -267,6 +267,7 @@ function ObservationView({ id, onClose, onChanged, onEdit }) {
 
   return (
     <Modal
+          printable
       title={obs ? `Audit Observation ${obs.obsNo}` : 'Audit Observation'}
       onClose={onClose}
       size="lg"

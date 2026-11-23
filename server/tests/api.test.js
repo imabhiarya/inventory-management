@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
+import mongoose from 'mongoose';
 import { createApp } from '../src/app.js';
 import { startDb, stopDb, resetDb, makeUser } from './helpers.js';
 import Item from '../src/models/Item.js';
@@ -494,6 +495,46 @@ describe('backup', () => {
     expect(items[0].currentStock).toBe(7);
     expect((await agent.get('/api/auth/me')).status).toBe(200);
   });
+
+  it('includes audit attachments, so a restore on a new PC brings the files back too', async () => {
+    const agent = await makeUser();
+    const obs = (await agent.post('/api/audits').send({ office: 'LAO', date: '2026-10-01', subject: 'Para 1' })).body.observation;
+    const PDF = Buffer.from('%PDF-1.4\n%%EOF').toString('base64');
+    const pdf = (await agent.post(`/api/audits/${obs._id}/files`).send({ name: 'para.pdf', data: PDF })).body.observation.files[0];
+
+    const backup = JSON.parse(JSON.stringify((await agent.get('/api/backup')).body)); // as written to disk
+    expect(backup.version).toBe(2);
+    expect(backup.files).toHaveLength(1);
+
+    // Simulate the new PC: nothing there.
+    const db = mongoose.connection.db;
+    await db.collection('auditFiles.files').deleteMany({});
+    await db.collection('auditFiles.chunks').deleteMany({});
+    expect((await agent.get(`/api/audits/files/${pdf.fileId}`)).status).toBe(404);
+
+    const res = await agent.post('/api/backup/restore').send(backup);
+    expect(res.status).toBe(200);
+    expect(res.body.counts).toMatchObject({ auditObservations: 1, files: 1 });
+    const file = await agent.get(`/api/audits/files/${pdf.fileId}`).buffer(true).parse((r, cb) => {
+      const chunks = [];
+      r.on('data', (c) => chunks.push(c));
+      r.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+    expect(file.status).toBe(200);
+    expect(file.body.toString('base64')).toBe(PDF);
+    await db.collection('auditFiles.files').deleteMany({});
+    await db.collection('auditFiles.chunks').deleteMany({});
+  });
+
+  it('still restores version 1 backups (made before attachments were included)', async () => {
+    const agent = await makeUser();
+    await newItem(agent, { openingQty: 3 });
+    const { files, ...v1 } = (await agent.get('/api/backup')).body;
+    await Item.deleteMany({});
+    const res = await agent.post('/api/backup/restore').send({ ...v1, version: 1 });
+    expect(res.status).toBe(200);
+    expect((await Item.find())[0].currentStock).toBe(3);
+  });
 });
 
 describe('configurable ledgers', () => {
@@ -836,6 +877,37 @@ describe('deleting cancelled vouchers', () => {
 });
 
 describe('orders (stand-alone purchase order record)', () => {
+  it('Payments (MER): totals per code head per month of the FY, by payment date, without cancelled orders', async () => {
+    const agent = await makeUser();
+    const pay = (codeHead, paymentDate, paymentAmount, extra = {}) =>
+      agent.post('/api/orders').send({
+        mode: 'GeM', orderDate: '2026-04-02', vendor: 'M/S Raj', codeHead, orderValue: paymentAmount,
+        billForwardedOn: '2026-04-03', paymentDate, paymentAmount, ...extra,
+      });
+    await pay('2305', '2026-04-20', 1000);
+    await pay('2305', '2026-04-25', 500.5);
+    await pay('2305', '2027-03-31', 200); // last day of FY 2026-27
+    await pay('2210', '2026-07-01', 300);
+    await pay('', '2026-07-15', 50); // no code head
+    await pay('2210', '2027-04-01', 999); // next FY
+    await pay('2210', '2026-07-02', 777, { cancelled: true });
+    await agent.post('/api/orders').send({ mode: 'GeM', orderDate: '2026-05-01', vendor: 'Unpaid', codeHead: '2305', orderValue: 10 });
+
+    const res = await agent.get('/api/orders/payments').query({ fy: '2026-27' });
+    expect(res.status).toBe(200);
+    expect(res.body.months.map((m) => m.key)).toEqual(['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12', '2027-01', '2027-02', '2027-03']);
+    expect(res.body.rows.map((r) => r.codeHead)).toEqual(['2210', '2305', '']);
+    const h2305 = res.body.rows.find((r) => r.codeHead === '2305');
+    expect(h2305.months[0]).toBe(1500.5);
+    expect(h2305.months[11]).toBe(200);
+    expect(h2305.total).toBe(1700.5);
+    expect(res.body.rows.find((r) => r.codeHead === '2210').months[3]).toBe(300);
+    expect(res.body.totals).toMatchObject({ total: 2050.5, payments: 5 });
+    expect(res.body.totals.months[3]).toBe(350);
+    expect(res.body.payments).toHaveLength(5);
+    expect((await agent.get('/api/orders/payments').query({ fy: '2026' })).status).toBe(400);
+  });
+
   it('records demand, approval, order, bill and payment; status follows the dates; no stock is touched', async () => {
     const agent = await makeUser();
     const base = {
@@ -969,5 +1041,71 @@ describe('consolidated demands', () => {
     expect((await agent.get('/api/demands').query({ consolidated: 'no' })).body.rows.map((r) => r.demandNo)).toEqual([d2.demandNo]);
     await agent.delete(`/api/consolidated-demands/${cd._id}`);
     expect((await agent.get('/api/demands').query({ consolidated: 'no' })).body.rows).toHaveLength(2);
+  });
+});
+
+describe('DCS (Demand → DCS)', () => {
+  const PDF = Buffer.from('%PDF-1.4\n%%EOF').toString('base64');
+
+  it('records header and items, computes amounts, attaches rate quotations, and is in the backup', async () => {
+    const agent = await makeUser();
+    const created = await agent.post('/api/dcs').send({
+      date: '2026-11-23', unit: 'GE (N) Shillong', jobNo: 'JOB/26/14', jobDescription: 'Repair of office block',
+      nameOfWork: 'Painting', authority: 'CWE letter 1234/W dated 01 Nov 2026',
+      lines: [
+        { nameOfWork: 'Painting', description: 'Enamel paint, white', uom: 'Ltr', qty: 20, rate: 310.5 },
+        { description: 'Brush 4"', uom: 'Nos', qty: 3, rate: 95, remarks: 'Local purchase' },
+      ],
+    });
+    expect(created.status).toBe(201);
+    const d = created.body.dcs;
+    expect(d).toMatchObject({ dcsNo: 'DCS-000001', jobNo: 'JOB/26/14', totalAmount: 6495 });
+    expect(d.lines.map((l) => l.amount)).toEqual([6210, 285]);
+    expect((await agent.post('/api/dcs').send({ date: '2026-11-23', lines: [{ description: '' }] })).status).toBe(400);
+
+    const withFile = await agent.post(`/api/dcs/${d._id}/files`).send({ name: 'Quotation M-s ABC.pdf', data: PDF });
+    expect(withFile.status).toBe(201);
+    const file = withFile.body.dcs.files[0];
+    expect((await agent.get(`/api/dcs/files/${file.fileId}`)).status).toBe(200);
+    expect((await agent.post(`/api/dcs/${d._id}/files`).send({ name: 'x.exe', data: PDF })).status).toBe(400);
+
+    const upd = await agent.put(`/api/dcs/${d._id}`).send({ date: '2026-11-24', jobNo: 'JOB/26/14', lines: [{ description: 'Enamel paint', qty: 2, rate: 100 }] });
+    expect(upd.body.dcs).toMatchObject({ totalAmount: 200 });
+    expect(upd.body.dcs.files).toHaveLength(1); // editing keeps the quotations
+    expect((await agent.get('/api/dcs').query({ q: 'JOB/26' })).body.rows).toHaveLength(1);
+
+    const backup = (await agent.get('/api/backup')).body;
+    expect(backup.data.dcs).toHaveLength(1);
+    expect(backup.files.map((f) => String(f._id))).toContain(String(file.fileId));
+
+    const viewer = await makeUser('viewer', 'dcsviewer');
+    expect((await viewer.post('/api/dcs').send({ date: '2026-11-23', lines: [{ description: 'x' }] })).status).toBe(403);
+
+    const del = await agent.delete(`/api/dcs/${d._id}`);
+    expect(del.status).toBe(200);
+    expect((await agent.get(`/api/dcs/files/${file.fileId}`)).status).toBe(404);
+  });
+
+  it('a line can come from the Item Master of any ledger, with more description typed after it', async () => {
+    const agent = await makeUser();
+    const item = await newItem(agent, { name: 'Cement OPC 43', ledger: 'STATIONARY', uom: 'Bag' });
+    const res = await agent.post('/api/dcs').send({ date: '2026-11-23', lines: [{ item: item._id, description: 'Cement OPC 43 – Ultratech or equivalent, fresh stock', uom: 'Bag', qty: 10, rate: 400 }] });
+    expect(res.status).toBe(201);
+    expect(res.body.dcs.lines[0]).toMatchObject({ item: item._id, description: 'Cement OPC 43 – Ultratech or equivalent, fresh stock', amount: 4000 });
+  });
+
+  it('signature blocks are set in Settings, can be removed, and start with defaults', async () => {
+    const agent = await makeUser();
+    const meta = (await agent.get('/api/settings')).body.settings;
+    expect(meta.dcsSignatures.map((s) => s.title)).toEqual(['Store I/C', 'Officer in Charge']);
+    expect(meta.dcsTitle).toBe('DRAFTED COSTED SCHEDULED');
+    const base = { ...meta };
+    for (const k of ['_id', 'createdAt', 'updatedAt', 'ledgers', 'stockIndent']) delete base[k];
+    const put = await agent.put('/api/settings').send({ ...base, dcsSignatures: [{ title: 'Prepared By', name: 'R. Kumar', designation: 'JE (Civ)' }] });
+    expect(put.status).toBe(200);
+    expect(put.body.settings.dcsSignatures).toEqual([{ title: 'Prepared By', name: 'R. Kumar', designation: 'JE (Civ)' }]);
+    expect((await agent.put('/api/settings').send({ ...base, dcsTitle: 'DETAILED COST STATEMENT (DCS)' })).body.settings.dcsTitle).toBe('DETAILED COST STATEMENT (DCS)');
+    expect((await agent.put('/api/settings').send({ ...base, dcsSignatures: [] })).body.settings.dcsSignatures).toEqual([]);
+    expect((await agent.put('/api/settings').send({ ...base, dcsSignatures: [{ title: '' }] })).status).toBe(400);
   });
 });

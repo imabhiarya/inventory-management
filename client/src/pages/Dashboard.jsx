@@ -33,7 +33,7 @@ export default function Dashboard() {
         back={false}
         extra={
           <span className={`pill ${online ? 'online' : 'offline'}`}>
-            <Monitor size={18} /> {online ? 'Online' : 'Offline'}
+            <Monitor size={18} /> {online ? 'System Ready' : 'Database Not Running'}
           </span>
         }
       />

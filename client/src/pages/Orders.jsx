@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ShoppingCart, ClipboardList, BarChart3, Plus, Trash2, Save, RotateCcw, Search, Pencil, Eye, X, FileUp, FileDown, FileSpreadsheet, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ShoppingCart, ClipboardList, BarChart3, Plus, Trash2, Save, RotateCcw, Search, Pencil, Eye, X, FileUp, FileDown, FileSpreadsheet, CheckCircle2, AlertTriangle, IndianRupee } from 'lucide-react';
 import { readOrderFile, downloadOrdersExcel } from '../utils/orderImport.js';
 import { api } from '../api.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -609,11 +609,20 @@ function OrderView({ order, onClose }) {
 }
 
 /** Order Report: filters, totals, register with Excel / PDF / Print. */
-function OrderReport({ onEdit }) {
+function OrderReport({ onEdit, link, onLink, onPayments }) {
   const { settings, canWrite, isAdmin, meta } = useApp();
   const toast = useToast();
   const modes = settings.procurementModes?.length ? settings.procurementModes : DEFAULT_MODES;
-  const [f, setF] = useState({ fy: '', status: '', mode: '', codeHead: '', from: '', to: '', q: '' });
+  // FY and code head come from (and go back to) the Payments (MER) tab.
+  const [f, setF] = useState(() => ({
+    fy: link?.fy || '',
+    status: '',
+    mode: '',
+    codeHead: link?.codeHead === NO_HEAD_VALUE ? '' : link?.codeHead || '',
+    from: '',
+    to: '',
+    q: '',
+  }));
   const [applied, setApplied] = useState(f);
   const { data, loading, reload } = useFetch('/orders', applied);
   const rows = data?.rows || [];
@@ -665,6 +674,7 @@ function OrderReport({ onEdit }) {
         onSubmit={(e) => {
           e.preventDefault();
           setApplied(f);
+          onLink?.(f.fy, f.codeHead);
         }}
       >
         <Field label="Financial Year" stack>
@@ -696,6 +706,14 @@ function OrderReport({ onEdit }) {
         </div>
         <button className="btn btn-blue">
           <Search size={18} /> View Report
+        </button>
+        <button
+          type="button"
+          className="btn btn-outline"
+          title="Month-wise payments for this FY and code head"
+          onClick={() => onPayments?.(f.fy || meta.currentFy, f.codeHead)}
+        >
+          <IndianRupee size={18} /> Payments (MER)
         </button>
       </form>
       <div className="print-doc">
@@ -808,10 +826,306 @@ function OrderReport({ onEdit }) {
   );
 }
 
+const NO_HEAD = '(No code head)';
+const round2 = (n) => Math.round(n * 100) / 100;
+const NO_HEAD_VALUE = '__none__'; // dropdown value for orders saved without a code head
+const headLabel = (h) => h || NO_HEAD;
+
+/**
+ * Payments (MER): amount paid in each month of a financial year, per code head.
+ * Pick a Code Head and / or a Month to get the statement to send on to the section.
+ * FY and code head are shared with the Order Report (`link`), so either opens the other on the same selection.
+ */
+function PaymentReport({ link, setLink, onOpenOrders }) {
+  const { meta, settings } = useApp();
+  const { codeHead, month } = link;
+  const fy = link.fy || meta.currentFy; // the Order Report may be on "All Years"
+  const set = (patch) => setLink({ ...link, ...patch });
+  const { data, loading } = useFetch('/orders/payments', { fy });
+  const [cell, setCell] = useState(null); // { codeHead, month } whose payments are listed
+  const months = data?.months || [];
+  const allRows = data?.rows || [];
+  const amt = (v) => (v ? fmtMoney(v) : '-');
+
+  // Code head choices: the Orders list, plus any head that has payments this FY but is no longer in it.
+  const listed = orderList(settings, 'orderCodeHeads');
+  const extra = allRows.map((r) => r.codeHead).filter((h) => h && !listed.includes(h));
+  const headOptions = [...listed, ...extra, ...(allRows.some((r) => !r.codeHead) ? [{ value: NO_HEAD_VALUE, label: NO_HEAD }] : [])];
+  const headKey = codeHead === NO_HEAD_VALUE ? '' : codeHead;
+  const headPicked = codeHead !== '';
+  const monthIdx = month ? months.findIndex((m) => m.key === month) : -1;
+  const monthLabel = monthIdx >= 0 ? months[monthIdx].label : '';
+
+  const rows = headPicked ? allRows.filter((r) => r.codeHead === headKey) : allRows;
+  const total = (r) => (monthIdx >= 0 ? r.months[monthIdx] : r.total);
+  const payments = (data?.payments || []).filter((p) => (!headPicked || (p.codeHead || '') === headKey) && (!month || p.month === month));
+  const sumPaid = round2(payments.reduce((s, p) => s + p.paymentAmount, 0));
+  const scope = [headPicked ? headLabel(headKey) : 'All code heads', monthLabel || `FY ${fy}`].join(' – ');
+
+  // With a month chosen: a statement of that month's payments (what goes to the section).
+  // Without: the month-wise matrix (Apr–Mar) per code head.
+  const statement = !!month;
+  const sl = (list) => (r) => list.indexOf(r) + 1;
+  const matrixColumns = [
+    { key: 'sl', label: 'Sl.', value: sl(rows) },
+    { key: 'codeHead', label: 'Code Head', value: (r) => headLabel(r.codeHead), width: 28 },
+    ...months.map((m, i) => ({ key: m.key, label: m.label, align: 'right', numeric: true, value: (r) => r.months[i], format: amt })),
+    { key: 'total', label: 'Total (₹)', align: 'right', numeric: true, format: fmtMoney },
+  ];
+  const monthTotals = months.map((_, i) => round2(rows.reduce((s, r) => s + r.months[i], 0)));
+  const matrixFooter = {
+    codeHead: 'Total',
+    ...Object.fromEntries(months.map((m, i) => [m.key, amt(monthTotals[i])])),
+    total: fmtMoney(round2(rows.reduce((s, r) => s + r.total, 0))),
+  };
+  const statementColumns = [
+    { key: 'sl', label: 'Sl.', value: sl(payments) },
+    { key: 'paymentDate', label: 'Payment Date', format: fmtDate },
+    ...(headPicked ? [] : [{ key: 'codeHead', label: 'Code Head', value: (p) => headLabel(p.codeHead), width: 24 }]),
+    { key: 'orderNo', label: 'Order No.' },
+    { key: 'supplyOrderNo', label: 'Supply Order / Contract No.', width: 22 },
+    { key: 'vendor', label: 'Firm / Vendor', value: (p) => (p.projectOffice ? `${p.vendor} (${p.projectOffice})` : p.vendor), width: 24 },
+    { key: 'paymentRef', label: 'Payment Ref. (DV / e-payment)', width: 20 },
+    { key: 'paymentAmount', label: 'Amount (₹)', align: 'right', numeric: true, format: fmtMoney },
+  ];
+  const statementFooter = { [headPicked ? 'orderNo' : 'codeHead']: 'Total', paymentAmount: fmtMoney(sumPaid) };
+  const columns = statement ? statementColumns : matrixColumns;
+  const exportRows = statement ? payments : rows;
+
+  const cellList = cell
+    ? (data?.payments || []).filter((p) => (p.codeHead || '') === cell.codeHead && (!cell.month || p.month === cell.month))
+    : [];
+  const cellMonth = cell?.month && months.find((m) => m.key === cell.month)?.label;
+  const open = (h, m) => setCell({ codeHead: h, month: m });
+
+  return (
+    <Panel
+      title="Payments (MER) – Month-wise by Code Head"
+      icon={BarChart3}
+      id="order-payments-print"
+      right={
+        <ExportButtons
+          orientable
+          printId="order-payments-print"
+          disabled={!exportRows.length}
+          getExport={() => ({
+            title: statement ? `Payment Statement – ${scope}` : `Payments (MER) – ${scope}`,
+            subtitle: statement ? `Total paid: ₹ ${fmtMoney(sumPaid)}` : 'Amount paid in each month (₹), by code head',
+            columns,
+            rows: exportRows,
+            footer: statement ? statementFooter : matrixFooter,
+            filename: `payments-${statement ? month : `fy-${fy}`}${headPicked ? `-${(headKey || 'no-code-head').split(/\s/)[0]}` : ''}`,
+          })}
+        />
+      }
+    >
+      <div className="filters no-print">
+        <Field label="Financial Year" stack>
+          <Select value={fy} onChange={(v) => v && set({ fy: v, month: '' })} options={fyOptions(meta.currentFy, 10)} />
+        </Field>
+        <Field label="Code Head" stack>
+          <Select value={codeHead} onChange={(v) => set({ codeHead: v })} placeholder="All Code Heads" options={headOptions} />
+        </Field>
+        <Field label="Month" stack>
+          <Select value={month} onChange={(v) => set({ month: v })} placeholder="All Months (Apr–Mar)" options={months.map((m) => ({ value: m.key, label: m.label }))} />
+        </Field>
+        <button type="button" className="btn btn-outline" style={{ alignSelf: 'end' }} onClick={() => onOpenOrders()} title="Order Report for this FY and code head">
+          <ClipboardList size={18} /> Open in Order Report
+        </button>
+      </div>
+      <p className="muted no-print" style={{ margin: '8px 0 0' }}>
+        A payment counts in the month of its payment date. Cancelled orders are left out.
+        {statement ? '' : ' Click an amount to see its payments, or choose a Month for a statement to send to the section.'}
+      </p>
+      <div className="print-doc">
+        <LedgerPrintHeader ledger={`${statement ? 'PAYMENT STATEMENT' : 'PAYMENTS (MER)'} – ${scope.toUpperCase()}`} asOn={fmtDate(new Date())} />
+      </div>
+      {data && (
+        <div className="order-totals">
+          <span>
+            Payments: <b>{payments.length}</b>
+          </span>
+          <span className="pending">
+            Paid – {scope}: <b>₹ {fmtMoney(sumPaid)}</b>
+          </span>
+        </div>
+      )}
+
+      {statement && rows.length > 0 && (
+        <div className="table-wrap" style={{ marginTop: 10 }}>
+          <table className="data" style={{ width: 'auto', minWidth: 420 }}>
+            <thead>
+              <tr>
+                <th>Code Head</th>
+                <th className="num">Paid in {monthLabel} (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.filter((r) => total(r)).map((r) => (
+                <tr key={r.codeHead || NO_HEAD}>
+                  <td>{headLabel(r.codeHead)}</td>
+                  <td className="num">{fmtMoney(total(r))}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th>Total</th>
+                <th className="num">{fmtMoney(sumPaid)}</th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
+      <div className="table-wrap" style={{ marginTop: 10 }}>
+        <table className="data">
+          <thead>
+            <tr>
+              {columns.map((c) => (
+                <th key={c.key} className={c.align === 'right' ? 'num' : undefined}>
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          {statement ? (
+            <tbody>
+              {payments.map((p, i) => (
+                <tr key={p._id}>
+                  {columns.map((c) => {
+                    const raw = c.key === 'sl' ? i + 1 : c.value ? c.value(p) : p[c.key];
+                    return (
+                      <td key={c.key} className={c.align === 'right' ? 'num' : ['sl', 'paymentDate', 'orderNo'].includes(c.key) ? 'center' : undefined}>
+                        {(c.format ? c.format(raw) : raw) || '-'}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              {!payments.length && (
+                <tr>
+                  <td colSpan={columns.length} className="empty">
+                    {loading ? 'Loading…' : `No payments – ${scope}.`}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          ) : (
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={r.codeHead || NO_HEAD}>
+                  <td className="center">{i + 1}</td>
+                  <td>{r.codeHead || <i>{NO_HEAD}</i>}</td>
+                  {months.map((m, j) => (
+                    <td key={m.key} className="num">
+                      {r.months[j] ? (
+                        <button type="button" className="link-btn" onClick={() => open(r.codeHead, m.key)}>
+                          {fmtMoney(r.months[j])}
+                        </button>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+                  ))}
+                  <td className="num">
+                    <button type="button" className="link-btn" onClick={() => open(r.codeHead, null)}>
+                      <b>{fmtMoney(r.total)}</b>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {!rows.length && (
+                <tr>
+                  <td colSpan={columns.length} className="empty">
+                    {loading ? 'Loading…' : `No payments – ${scope}.`}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          )}
+          {exportRows.length > 0 && (
+            <tfoot>
+              {statement ? (
+                <tr>
+                  <th colSpan={columns.length - 1}>Total</th>
+                  <th className="num">{fmtMoney(sumPaid)}</th>
+                </tr>
+              ) : (
+                <tr>
+                  <th colSpan={2}>Total</th>
+                  {months.map((m, j) => (
+                    <th key={m.key} className="num">
+                      {amt(monthTotals[j])}
+                    </th>
+                  ))}
+                  <th className="num">{matrixFooter.total}</th>
+                </tr>
+              )}
+            </tfoot>
+          )}
+        </table>
+      </div>
+      {cell && (
+        <Modal title={`${headLabel(cell.codeHead)} – ${cellMonth || `FY ${fy}`}`} size="lg" onClose={() => setCell(null)}>
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Sl.</th>
+                  <th>Payment Date</th>
+                  <th>Order No.</th>
+                  <th>Supply Order / Contract No.</th>
+                  <th>Firm / Vendor</th>
+                  <th>Payment Ref.</th>
+                  <th className="num">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cellList.map((p, i) => (
+                  <tr key={p._id}>
+                    <td className="center">{i + 1}</td>
+                    <td className="center">{fmtDate(p.paymentDate)}</td>
+                    <td className="center">{p.orderNo}</td>
+                    <td>{p.supplyOrderNo || '-'}</td>
+                    <td>{p.projectOffice ? `${p.vendor} (${p.projectOffice})` : p.vendor}</td>
+                    <td>{p.paymentRef || '-'}</td>
+                    <td className="num">{fmtMoney(p.paymentAmount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th colSpan={6}>Total</th>
+                  <th className="num">{fmtMoney(round2(cellList.reduce((s, p) => s + p.paymentAmount, 0)))}</th>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+            <button
+              type="button"
+              className="btn btn-blue"
+              onClick={() => {
+                set({ codeHead: cell.codeHead || NO_HEAD_VALUE, month: cell.month || '' });
+                setCell(null);
+              }}
+            >
+              Show as statement
+            </button>
+          </div>
+        </Modal>
+      )}
+    </Panel>
+  );
+}
+
 /** Orders: stand-alone record of purchases (GeM / other sources) — entry and its own report. */
 export default function Orders() {
   const [tab, setTab] = useState('entry');
   const [editing, setEditing] = useState(null);
+  // Shared by Order Report and Payments (MER): the FY and code head picked in one carry over to the other.
+  const [link, setLink] = useState({ fy: '', codeHead: '', month: '' });
   return (
     <>
       <PageHeader icon={ShoppingCart} plainIcon title="Orders (GeM / Other Sources)" />
@@ -822,8 +1136,13 @@ export default function Orders() {
         <button type="button" className={`tab ${tab === 'report' ? 'active' : ''}`} onClick={() => setTab('report')}>
           <BarChart3 size={20} /> Order Report
         </button>
+        <button type="button" className={`tab ${tab === 'payments' ? 'active' : ''}`} onClick={() => setTab('payments')}>
+          <IndianRupee size={20} /> Payments (MER)
+        </button>
       </div>
-      {tab === 'entry' ? (
+      {tab === 'payments' ? (
+        <PaymentReport link={link} setLink={setLink} onOpenOrders={() => setTab('report')} />
+      ) : tab === 'entry' ? (
         <OrderForm
           key={editing?._id || 'new'}
           editing={editing}
@@ -839,6 +1158,12 @@ export default function Orders() {
         />
       ) : (
         <OrderReport
+          link={link}
+          onLink={(fy, codeHead) => setLink((l) => ({ ...l, fy: fy || l.fy, codeHead, month: fy && fy !== l.fy ? '' : l.month }))}
+          onPayments={(fy, codeHead) => {
+            setLink((l) => ({ fy: fy || l.fy, codeHead, month: fy && fy !== l.fy ? '' : l.month }));
+            setTab('payments');
+          }}
           onEdit={(o) => {
             setEditing(o);
             setTab('entry');

@@ -7,6 +7,7 @@ import { useFetch, useItems } from '../hooks.js';
 import { Panel, Field, Select, Modal } from '../components/ui.jsx';
 import { fmtDate, fmtQty, fmtMoney, numberToWords } from '../utils/format.js';
 import { printSection } from '../utils/export.js';
+import { SignatureBlocks } from './Dcs.jsx';
 
 const DEFAULT_FREQUENCIES = ['Regular', 'Monthly', 'Quarterly', 'Half Yearly', 'Annual', 'Urgent'];
 const blankHead = (today) => ({ date: today, forwardedTo: '', subject: '', frequency: 'Regular', codeHead: '', authority: '', remarks: '' });
@@ -139,20 +140,7 @@ function ConsolidatedPrint({ cd }) {
         The above requirement has been consolidated from the demands received from the sections and is forwarded for necessary
         procurement action, please, so that the smooth functioning of the office is maintained.
       </p>
-      <div className="doc-sign demand-sign">
-        <div>
-          Prepared By
-          <small>(Store Keeper)</small>
-        </div>
-        <div>
-          Checked By
-          <small>(Store Officer)</small>
-        </div>
-        <div>
-          Approved / Forwarded By
-          <small>({cd.authority || 'Officer In-Charge'})</small>
-        </div>
-      </div>
+      <SignatureBlocks />
     </div>
   );
 }
@@ -589,6 +577,7 @@ export default function ConsolidatedDemand() {
 
       {viewing && (
         <Modal
+          printable
           title={`Consolidated Demand ${viewing.cdNo}`}
           size="lg"
           onClose={() => setViewing(null)}

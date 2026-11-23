@@ -122,6 +122,16 @@ How it works:
 - To move data across from the web version, take a backup there (**Backup & Restore**) and restore it in the desktop app.
 - If a preferred port is busy, the app picks a free one and remembers it.
 
+### Moving to a new PC (old PC failed)
+
+1. On the old PC, regularly use **Backup & Restore → Download Backup (JSON)** and keep the file off that PC (pen drive, another computer). The file holds everything: items, vouchers, ledgers, settings, audit attachments and user accounts.
+2. Install the app on the new PC. On its first start, under **Moving from an old computer?**, click **Choose backup file…**, pick the file and click **Restore this backup and continue**.
+3. Sign in with the same username and password as on the old PC. No internet is needed.
+
+The Backup & Restore page also offers **Download Backup (Excel)**: one sheet per register, viewable in Excel, and restorable from the same page (its Choose backup file… takes `.json` or `.xlsx`). The new-PC first-run screen takes the JSON file only.
+
+From the command line the same restore is `BACKUP_FILE=path/to/backup.json npm --prefix server run restore-backup` (it replaces all data in `MONGODB_URI`).
+
 ### Online sync (MongoDB Atlas)
 
 The desktop app always saves to the database on the PC, so it works the same with or without internet. With **Online Sync → Sync Settings…** turned on, it also keeps a copy of all data in a MongoDB Atlas database:
